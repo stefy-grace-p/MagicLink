@@ -1,0 +1,2 @@
+# MagicLink
+Demo project
