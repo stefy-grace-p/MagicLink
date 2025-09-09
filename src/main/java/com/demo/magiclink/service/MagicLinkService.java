@@ -1,8 +1,11 @@
+package com.demo.magiclink.service;
 
-import com.example.magiclink.email.EmailSender;
-import com.example.magiclink.model.MagicLinkToken;
-import com.example.magiclink.repo.MagicLinkTokenRepository;
-import org.springframework.beans.factory.annotation.Value;
+import com.demo.magiclink.model.MagicLinkToken;
+import com.demo.magiclink.repository.MagicLinkTokenRepository;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,58 +14,31 @@ import java.time.LocalDateTime;
 @Service
 public class MagicLinkService {
 
-    private final MagicLinkTokenRepository tokenRepo;
-    private final EmailSender emailSender;
-    private final String baseUrl;
-    private final int expirationMinutes;
+    @Autowired
+    private MagicLinkTokenRepository tokenRepo;
+    private final String baseUrl="http://localhost:8080/magic-link/verify";
+    private final int expirationMinutes=15;
 
-    public MagicLinkService(MagicLinkTokenRepository tokenRepo,
-                            EmailSender emailSender,
-                            @Value("${magiclink.base-url}") String baseUrl,
-                            @Value("${magiclink.token-expiration-minutes:15}") int expirationMinutes) {
-        this.tokenRepo = tokenRepo;
-        this.emailSender = emailSender;
-        this.baseUrl = baseUrl;
-        this.expirationMinutes = expirationMinutes;
-    }
-
-    public void requestMagicLink(String email) {
+    public ResponseEntity<?> requestMagicLink() {
         LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(expirationMinutes);
-        MagicLinkToken token = new MagicLinkToken(email, expiresAt);
+        MagicLinkToken token = new MagicLinkToken(expiresAt);
         tokenRepo.save(token);
 
         String link = baseUrl + "?token=" + token.getToken();
-        String subject = "Your magic sign-in link";
-        String body = "Hello,\n\nClick the link below to sign in. It will expire at " + token.getExpiresAt() + ".\n\n" + link + "\n\nIf you didn't request this, ignore this email.";
-        emailSender.send(email, subject, body);
+        return new ResponseEntity<>(link,HttpStatus.OK);
     }
 
     @Transactional
-    public VerificationResult verifyToken(String tokenStr) {
+    public ResponseEntity<?> verifyToken(String tokenStr) {
         return tokenRepo.findByToken(tokenStr)
-                .map(t -> {
-                    if (t.isUsed()) return new VerificationResult(false, "Token already used");
-                    if (t.getExpiresAt().isBefore(LocalDateTime.now())) return new VerificationResult(false, "Token expired");
-                    t.setUsed(true);
-                    tokenRepo.save(t);
-                    // Here you would normally create a session or JWT. For demo, we return success with email.
-                    return new VerificationResult(true, "Success", t.getEmail());
+                .map(token -> {
+                    if (token.isUsed()) return new ResponseEntity<>("Page not available",HttpStatus.BAD_REQUEST);
+                    if (token.getExpiresAt().isBefore(LocalDateTime.now())) return new ResponseEntity<>("Token Expired",HttpStatus.BAD_REQUEST);
+                    token.setUsed(true);
+                    tokenRepo.save(token);
+                    return new ResponseEntity<>("Welcome, User",HttpStatus.OK);
                 })
-                .orElse(new VerificationResult(false, "Invalid token"));
+                .orElse(new ResponseEntity<>(null, HttpStatus.BAD_REQUEST));
     }
 
-    public static class VerificationResult {
-        public final boolean success;
-        public final String message;
-        public final String email;
-
-        public VerificationResult(boolean success, String message) {
-            this(success, message, null);
-        }
-        public VerificationResult(boolean success, String message, String email) {
-            this.success = success;
-            this.message = message;
-            this.email = email;
-        }
-    }
 }

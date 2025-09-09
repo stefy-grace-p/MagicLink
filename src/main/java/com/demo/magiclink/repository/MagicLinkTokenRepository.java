@@ -1,4 +1,6 @@
-import com.example.magiclink.model.MagicLinkToken;
+package com.demo.magiclink.repository;
+
+import com.demo.magiclink.model.MagicLinkToken;
 import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.Optional;
 
